@@ -1,6 +1,10 @@
 'use server'
 
 import webpush, { PushSubscription as WebPushSubscription } from 'web-push'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { connectDB } from '@/lib/db'
+import PushSubscriptionModel from '@/lib/models/PushSubscription'
 
 webpush.setVapidDetails(
   'mailto:info@geovardiya.com',
@@ -8,38 +12,47 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY!
 )
 
-// Production'da bu abonelikler veritabanında saklanmalı
-let subscription: WebPushSubscription | null = null
-
 export async function subscribeUser(sub: WebPushSubscription) {
-  subscription = sub
-  // Örnek DB kaydı: await db.subscriptions.create({ data: sub })
+  const session = await getServerSession(authOptions)
+  if (!session) return { success: false }
+
+  await connectDB()
+  const userId = (session.user as { id: string }).id
+
+  await PushSubscriptionModel.findOneAndUpdate(
+    { userId },
+    { subscription: sub },
+    { upsert: true }
+  )
   return { success: true }
 }
 
 export async function unsubscribeUser() {
-  subscription = null
-  // Örnek DB silme: await db.subscriptions.delete({ where: { endpoint: sub.endpoint } })
+  const session = await getServerSession(authOptions)
+  if (!session) return { success: false }
+
+  await connectDB()
+  const userId = (session.user as { id: string }).id
+  await PushSubscriptionModel.deleteOne({ userId })
   return { success: true }
 }
 
 export async function sendNotification(message: string) {
-  if (!subscription) {
-    throw new Error('Aktif abonelik bulunamadı')
-  }
+  const session = await getServerSession(authOptions)
+  if (!session) throw new Error('Oturum bulunamadı')
+
+  await connectDB()
+  const userId = (session.user as { id: string }).id
+  const record = await PushSubscriptionModel.findOne({ userId })
+  if (!record) throw new Error('Abonelik bulunamadı')
 
   try {
     await webpush.sendNotification(
-      subscription,
-      JSON.stringify({
-        title: 'GeoVardiya',
-        body: message,
-        icon: '/icon-192x192.png',
-      })
+      record.subscription as webpush.PushSubscription,
+      JSON.stringify({ title: 'GeoVardiyaApp', body: message, icon: '/icon-192x192.png' })
     )
     return { success: true }
-  } catch (error) {
-    console.error('Push bildirim gönderme hatası:', error)
+  } catch {
     return { success: false, error: 'Bildirim gönderilemedi' }
   }
 }
