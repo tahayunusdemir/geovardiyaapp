@@ -116,8 +116,25 @@ export default function EmployeeDashboard() {
   async function initPush() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
     const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' })
+
+    // Periodic Background Sync kaydı (Android Chrome destekler)
+    if ('periodicSync' in reg) {
+      try {
+        const ps = (reg as unknown as { periodicSync: { getTags(): Promise<string[]>; register(tag: string, opts: { minInterval: number }): Promise<void> } }).periodicSync
+        const tags = await ps.getTags()
+        if (!tags.includes('check-location')) {
+          await ps.register('check-location', { minInterval: 5 * 60 * 1000 })
+        }
+      } catch { /* izin verilmedi veya desteklenmiyor */ }
+    }
+
     const existing = await reg.pushManager.getSubscription()
-    if (existing) { setPushSubscribed(true); return }
+    if (existing) {
+      // Tarayıcıda abonelik var — her zaman sunucuya senkronize et
+      await subscribeUser(JSON.parse(JSON.stringify(existing)))
+      setPushSubscribed(true)
+      return
+    }
 
     try {
       const sub = await reg.pushManager.subscribe({
