@@ -3,8 +3,23 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import { connectDB } from './db'
 import User from './models/User'
 
+const THIRTY_DAYS = 30 * 24 * 60 * 60
+
 export const authOptions: NextAuthOptions = {
-  session: { strategy: 'jwt' },
+  session: { strategy: 'jwt', maxAge: THIRTY_DAYS },
+  jwt: { maxAge: THIRTY_DAYS },
+  cookies: {
+    sessionToken: {
+      name: 'next-auth.session-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: THIRTY_DAYS,
+      },
+    },
+  },
   pages: { signIn: '/' },
   providers: [
     CredentialsProvider({

@@ -56,8 +56,8 @@ async function checkLocationInBackground() {
 
     const { lat, lng, savedAt } = await response.json()
 
-    // 30 dakikadan eski konum verisi kullanma — yanıltıcı olur
-    if (Date.now() - savedAt > 30 * 60 * 1000) return
+    // 6 saatten eski konum verisi kullanma
+    if (Date.now() - savedAt > 6 * 60 * 60 * 1000) return
 
     await fetch('/api/location/check', {
       method: 'POST',
