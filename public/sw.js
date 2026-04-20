@@ -3,6 +3,11 @@
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()))
 
+// Tarayıcının PWA kurulum kriterini karşılamak için gerekli
+self.addEventListener('fetch', (event) => {
+  event.respondWith(fetch(event.request))
+})
+
 // Periodic Background Sync — OS tarafından uyandırılır (Android Chrome)
 self.addEventListener('periodicsync', (event) => {
   if (event.tag === 'check-location') {
