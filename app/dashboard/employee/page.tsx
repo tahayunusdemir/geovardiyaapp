@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { subscribeUser, unsubscribeUser } from '@/app/actions'
 
@@ -16,6 +16,17 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray
 }
 
+async function sendNotify(type: string) {
+  try {
+    await fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type }),
+      credentials: 'same-origin',
+    })
+  } catch { /* gönderilemedi, sessizce geç */ }
+}
+
 export default function EmployeeDashboard() {
   const { data: session } = useSession()
   const [locationStatus, setLocationStatus] = useState<LocationStatus>('checking')
@@ -29,12 +40,25 @@ export default function EmployeeDashboard() {
     typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent)
   )
 
+  // Geçiş tespiti için ref'ler — state değil, bildirim tetikleme için
+  const gpsRef = useRef<boolean | null>(null)   // null=bilinmiyor, true=var, false=yok
+  const onlineRef = useRef(true)
+  const pushInitRef = useRef(false)
+
   const checkLocation = useCallback(async () => {
     if (!session?.user) return
     setLocationStatus('checking')
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
+        // GPS yeniden geldi
+        if (gpsRef.current === false) {
+          gpsRef.current = true
+          sendNotify('gps-restored')
+        } else {
+          gpsRef.current = true
+        }
+
         const { latitude: lat, longitude: lng } = pos.coords
 
         if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
@@ -61,19 +85,71 @@ export default function EmployeeDashboard() {
           setLocationStatus('error')
         }
       },
-      () => setLocationStatus('error')
+      (error) => {
+        // GPS sinyali kayboldu (POSITION_UNAVAILABLE = 2)
+        if (error.code === 2 && gpsRef.current !== false) {
+          gpsRef.current = false
+          sendNotify('gps-lost')
+        }
+        setLocationStatus('error')
+      },
+      { timeout: 15000, maximumAge: 60000 }
     )
   }, [session])
 
-  // İzin kontrolü — session'a ihtiyaç yok, bir kez çalışır
-  useEffect(() => {
-    initPermissions()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const initPush = useCallback(async () => {
+    if (pushInitRef.current) return
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+    pushInitRef.current = true
+
+    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' })
+
+    if ('periodicSync' in reg) {
+      try {
+        const ps = (reg as unknown as {
+          periodicSync: {
+            getTags(): Promise<string[]>
+            register(tag: string, opts: { minInterval: number }): Promise<void>
+          }
+        }).periodicSync
+        const tags = await ps.getTags()
+        if (!tags.includes('check-location')) {
+          await ps.register('check-location', { minInterval: 5 * 60 * 1000 })
+        }
+      } catch { /* izin verilmedi veya desteklenmiyor */ }
+    }
+
+    const existing = await reg.pushManager.getSubscription()
+    if (existing) {
+      const result = await subscribeUser(JSON.parse(JSON.stringify(existing)))
+      if (result.success) setPushSubscribed(true)
+      return
+    }
+
+    try {
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
+      })
+      const result = await subscribeUser(JSON.parse(JSON.stringify(sub)))
+      if (result.success) setPushSubscribed(true)
+      else pushInitRef.current = false
+    } catch {
+      pushInitRef.current = false
+    }
   }, [])
 
-  // Otomatik kontrol — session hazır olduğunda kurulur
+  // İzin durumu — bir kez mount'ta çalışır
   useEffect(() => {
-    if (!session?.user) return
+    initPermissions()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Session + izin her ikisi de hazır olduğunda konum ve push başlat
+  useEffect(() => {
+    if (!session?.user || permStep !== 'granted') return
+    checkLocation()
+    initPush()
     const interval = setInterval(checkLocation, 5 * 60 * 1000)
     const onVisible = () => {
       if (document.visibilityState === 'visible') checkLocation()
@@ -83,7 +159,30 @@ export default function EmployeeDashboard() {
       clearInterval(interval)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [session, checkLocation])
+  }, [session, permStep, checkLocation, initPush])
+
+  // Bağlantı durumu takibi
+  useEffect(() => {
+    const handleOffline = () => {
+      if (!onlineRef.current) return
+      onlineRef.current = false
+      // Sunucuya gidemeyiz — SW yerel bildirim gösterir
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'NOTIFY_OFFLINE' })
+      }
+    }
+    const handleOnline = () => {
+      if (onlineRef.current) return
+      onlineRef.current = true
+      sendNotify('connection-restored')
+    }
+    window.addEventListener('offline', handleOffline)
+    window.addEventListener('online', handleOnline)
+    return () => {
+      window.removeEventListener('offline', handleOffline)
+      window.removeEventListener('online', handleOnline)
+    }
+  }, [])
 
   async function initPermissions() {
     if (!('geolocation' in navigator)) {
@@ -95,8 +194,6 @@ export default function EmployeeDashboard() {
     const perm = await navigator.permissions.query({ name: 'geolocation' })
     if (perm.state === 'granted') {
       setPermStep('granted')
-      checkLocation()
-      initPush()
     } else if (perm.state === 'denied') {
       setPermStep('denied')
       setShowInstructions(true)
@@ -108,42 +205,9 @@ export default function EmployeeDashboard() {
 
   function requestLocation() {
     navigator.geolocation.getCurrentPosition(
-      () => { setPermStep('granted'); checkLocation(); initPush() },
+      () => setPermStep('granted'),
       () => { setPermStep('denied'); setShowInstructions(true) }
     )
-  }
-
-  async function initPush() {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
-    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' })
-
-    // Periodic Background Sync kaydı (Android Chrome destekler)
-    if ('periodicSync' in reg) {
-      try {
-        const ps = (reg as unknown as { periodicSync: { getTags(): Promise<string[]>; register(tag: string, opts: { minInterval: number }): Promise<void> } }).periodicSync
-        const tags = await ps.getTags()
-        if (!tags.includes('check-location')) {
-          await ps.register('check-location', { minInterval: 5 * 60 * 1000 })
-        }
-      } catch { /* izin verilmedi veya desteklenmiyor */ }
-    }
-
-    const existing = await reg.pushManager.getSubscription()
-    if (existing) {
-      // Tarayıcıda abonelik var — her zaman sunucuya senkronize et
-      await subscribeUser(JSON.parse(JSON.stringify(existing)))
-      setPushSubscribed(true)
-      return
-    }
-
-    try {
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
-      })
-      await subscribeUser(JSON.parse(JSON.stringify(sub)))
-      setPushSubscribed(true)
-    } catch { /* push desteklenmiyor */ }
   }
 
   async function handleUnsubscribePush() {
@@ -152,14 +216,15 @@ export default function EmployeeDashboard() {
     await sub?.unsubscribe()
     await unsubscribeUser()
     setPushSubscribed(false)
+    pushInitRef.current = false
   }
 
   const statusConfig = {
-    checking:     { color: 'text-zinc-400', bg: 'bg-zinc-800',       dot: 'bg-zinc-500',  label: 'Kontrol ediliyor...' },
-    inside:       { color: 'text-green-400', bg: 'bg-green-500/10',  dot: 'bg-green-400', label: 'Alan İçindesiniz' },
-    outside:      { color: 'text-red-400',   bg: 'bg-red-500/10',    dot: 'bg-red-400',   label: 'Alan Dışındasınız' },
-    error:        { color: 'text-yellow-400', bg: 'bg-yellow-500/10', dot: 'bg-yellow-400', label: 'Konum alınamadı' },
-    'no-workplace': { color: 'text-zinc-400', bg: 'bg-zinc-800',     dot: 'bg-zinc-500',  label: 'İşyerine atanmadınız' },
+    checking:       { color: 'text-zinc-400',   bg: 'bg-zinc-800',        dot: 'bg-zinc-500',   label: 'Kontrol ediliyor...' },
+    inside:         { color: 'text-green-400',  bg: 'bg-green-500/10',    dot: 'bg-green-400',  label: 'Alan İçindesiniz' },
+    outside:        { color: 'text-red-400',    bg: 'bg-red-500/10',      dot: 'bg-red-400',    label: 'Alan Dışındasınız' },
+    error:          { color: 'text-yellow-400', bg: 'bg-yellow-500/10',   dot: 'bg-yellow-400', label: 'Konum alınamadı' },
+    'no-workplace': { color: 'text-zinc-400',   bg: 'bg-zinc-800',        dot: 'bg-zinc-500',   label: 'İşyerine atanmadınız' },
   }
   const s = statusConfig[locationStatus]
 
@@ -237,7 +302,9 @@ export default function EmployeeDashboard() {
           <div className="min-w-0">
             <p className="text-sm font-medium">Push Bildirimler</p>
             <p className="text-xs text-zinc-500 mt-0.5 truncate">
-              {pushSubscribed ? 'Aktif — alan dışına çıkınca bildirim alırsınız' : 'Kapalı'}
+              {pushSubscribed
+                ? 'Aktif — alan, GPS ve bağlantı değişimlerinde bildirim alırsınız'
+                : 'Kapalı'}
             </p>
           </div>
           {pushSubscribed ? (
@@ -249,12 +316,12 @@ export default function EmployeeDashboard() {
 
         {/* Bilgi */}
         <div className="bg-zinc-900 rounded-2xl p-5 flex flex-col gap-2">
-          <p className="text-sm font-medium">Nasıl Çalışır?</p>
+          <p className="text-sm font-medium">Bildirimler</p>
           <ul className="text-xs text-zinc-400 flex flex-col gap-1.5">
-            <li>• Konumunuz her 5 dakikada bir otomatik kontrol edilir</li>
-            <li>• Telefon ekranı kapalıyken de arka planda çalışır</li>
-            <li>• Alan dışına çıktığınızda hem siz hem işvereniniz bildirim alır</li>
-            <li>• Konum verisi sadece vardiya takibi için kullanılır</li>
+            <li>• Alan içine girince / dışına çıkınca</li>
+            <li>• GPS sinyali kaybolunca / yeniden gelince</li>
+            <li>• İnternet bağlantısı kesilince / yeniden bağlanınca</li>
+            <li>• Konum her 5 dakikada bir otomatik kontrol edilir</li>
           </ul>
         </div>
 

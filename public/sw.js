@@ -70,7 +70,7 @@ async function checkLocationInBackground() {
   }
 }
 
-// Sayfadan gelen konum verisini timestamp ile cache'e kaydet
+// Sayfadan gelen mesajları işle
 self.addEventListener('message', async (event) => {
   if (event.data?.type === 'SAVE_LOCATION') {
     const cache = await caches.open('geo-cache')
@@ -78,5 +78,16 @@ self.addEventListener('message', async (event) => {
       'last-location',
       new Response(JSON.stringify({ ...event.data.payload, savedAt: Date.now() }))
     )
+  }
+
+  // İnternet kesildiğinde sunucuya gidemeyiz — SW yerel bildirim gösterir
+  if (event.data?.type === 'NOTIFY_OFFLINE') {
+    self.registration.showNotification('GeoVardiyaApp', {
+      body: 'İnternet bağlantısı kesildi.',
+      icon: '/icon-192x192.png',
+      badge: '/badge.png',
+      tag: 'connection-status',
+      renotify: true,
+    })
   }
 })

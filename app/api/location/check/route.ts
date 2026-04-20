@@ -98,7 +98,9 @@ async function sendPushToUser(userId: string, payload: { title: string; body: st
       sub.subscription as webpush.PushSubscription,
       JSON.stringify({ ...payload, icon: '/icon-192x192.png' })
     )
-  } catch {
-    await PushSubscriptionModel.deleteOne({ userId })
+  } catch (err: unknown) {
+    if ((err as { statusCode?: number }).statusCode === 410) {
+      await PushSubscriptionModel.deleteOne({ userId })
+    }
   }
 }
