@@ -34,6 +34,13 @@ export function InstallPromptProvider({ children }: { children: React.ReactNode 
       window.matchMedia('(display-mode: standalone)').matches
     ) return
 
+    // Check if the event was captured early by the inline script in layout.tsx
+    const early = (window as unknown as Record<string, unknown>).__deferredInstallPrompt as BeforeInstallPromptEvent | undefined
+    if (early) {
+      setDeferredPrompt(early)
+      return
+    }
+
     function handler(e: Event) {
       e.preventDefault()
       setDeferredPrompt(e as BeforeInstallPromptEvent)
