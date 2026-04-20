@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { subscribeUser, unsubscribeUser } from '@/app/actions'
-import InstallPrompt from '@/components/InstallPrompt'
 
 type LocationStatus = 'checking' | 'inside' | 'outside' | 'error' | 'no-workplace'
 type PermissionStep = 'idle' | 'requesting' | 'denied' | 'granted'
@@ -327,7 +326,6 @@ export default function EmployeeDashboard() {
         </div>
 
       </div>
-      <InstallPrompt />
     </div>
   )
 }

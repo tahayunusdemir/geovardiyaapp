@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSession, signOut } from 'next-auth/react'
-import InstallPrompt from '@/components/InstallPrompt'
 import { useTheme } from 'next-themes'
 import { Moon, Sun, UserPlus, UserMinus, Search } from 'lucide-react'
 import dynamic from 'next/dynamic'
@@ -455,7 +454,6 @@ export default function EmployerDashboard() {
         )}
 
       </div>
-      <InstallPrompt />
     </div>
   )
 }
