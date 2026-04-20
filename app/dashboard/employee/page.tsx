@@ -155,15 +155,28 @@ export default function EmployeeDashboard() {
     }, 0)
     const interval = setInterval(checkLocation, 5 * 60 * 1000)
     const onVisible = () => {
-      if (document.visibilityState === 'visible') checkLocation()
+      if (document.visibilityState === 'visible') void checkLocation()
     }
+    const onFocus = () => void checkLocation()
     document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onFocus)
     return () => {
       window.clearTimeout(initialRun)
       clearInterval(interval)
       document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onFocus)
     }
   }, [session, permStep, checkLocation, initPush])
+
+  // SW'den gelen CHECK_LOCATION mesajını dinle
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'CHECK_LOCATION') void checkLocation()
+    }
+    navigator.serviceWorker.addEventListener('message', handleMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', handleMessage)
+  }, [checkLocation])
 
   // Bağlantı durumu takibi
   useEffect(() => {

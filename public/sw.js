@@ -47,13 +47,13 @@ self.addEventListener('notificationclick', (event) => {
 async function checkLocationInBackground() {
   const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
 
-  // Aktif sekme varsa ona mesaj gönder, gerçek konumu o göndersin
+  // Aktif sekme varsa gerçek konumu al diye mesaj gönder
   if (clients.length > 0) {
     clients[0].postMessage({ type: 'CHECK_LOCATION' })
-    return
+    // Mesaj iletimi garantisiz — cache'deki konum ile API'yi de çağır
   }
 
-  // Ekran kapalı — cache'deki son konumla API'yi çağır
+  // Cache'deki son konumla API'yi çağır
   try {
     const cache = await caches.open('geo-cache')
     const response = await cache.match('last-location')
