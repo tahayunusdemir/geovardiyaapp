@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Providers from "./providers";
@@ -14,13 +14,28 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  applicationName: "GeoVardiyaApp",
   title: "GeoVardiyaApp",
   description: "Coğrafi konum destekli vardiya yönetimi",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512x512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icon-192x192.png", sizes: "192x192", type: "image/png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "GeoVardiyaApp",
+    statusBarStyle: "default",
+  },
 };
 
-export const viewport = {
-  width: 'device-width',
+export const viewport: Viewport = {
+  width: "device-width",
   initialScale: 1,
+  themeColor: "#18181b",
 };
 
 export default function RootLayout({

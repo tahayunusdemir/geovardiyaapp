@@ -149,14 +149,17 @@ export default function EmployeeDashboard() {
   // Session + izin her ikisi de hazır olduğunda konum ve push başlat
   useEffect(() => {
     if (!session?.user || permStep !== 'granted') return
-    checkLocation()
-    initPush()
+    const initialRun = window.setTimeout(() => {
+      void checkLocation()
+      void initPush()
+    }, 0)
     const interval = setInterval(checkLocation, 5 * 60 * 1000)
     const onVisible = () => {
       if (document.visibilityState === 'visible') checkLocation()
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => {
+      window.clearTimeout(initialRun)
       clearInterval(interval)
       document.removeEventListener('visibilitychange', onVisible)
     }
@@ -192,19 +195,31 @@ export default function EmployeeDashboard() {
       return
     }
 
-    const perm = await navigator.permissions.query({ name: 'geolocation' })
-    if (perm.state === 'granted') {
-      setPermStep('granted')
-    } else if (perm.state === 'denied') {
-      setPermStep('denied')
-      setShowInstructions(true)
-    } else {
+    if (!('permissions' in navigator) || typeof navigator.permissions.query !== 'function') {
+      setPermStep('requesting')
+      requestLocation()
+      return
+    }
+
+    try {
+      const perm = await navigator.permissions.query({ name: 'geolocation' })
+      if (perm.state === 'granted') {
+        setPermStep('granted')
+      } else if (perm.state === 'denied') {
+        setPermStep('denied')
+        setShowInstructions(true)
+      } else {
+        setPermStep('requesting')
+        requestLocation()
+      }
+    } catch {
       setPermStep('requesting')
       requestLocation()
     }
   }
 
   function requestLocation() {
+    setPermStep('requesting')
     navigator.geolocation.getCurrentPosition(
       () => setPermStep('granted'),
       () => { setPermStep('denied'); setShowInstructions(true) }
@@ -316,7 +331,7 @@ export default function EmployeeDashboard() {
         </div>
 
         {/* Ana ekrana ekle */}
-        {permStep === 'granted' && <InstallPrompt />}
+        <InstallPrompt />
 
         {/* Bilgi */}
         <div className="bg-zinc-900 rounded-2xl p-5 flex flex-col gap-2">

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import InstallPrompt from '@/components/InstallPrompt'
 
 export default function Page() {
   const [tab, setTab] = useState<'login' | 'register'>('login')
@@ -185,6 +186,9 @@ export default function Page() {
           </form>
         )}
 
+        <div className="mt-6">
+          <InstallPrompt />
+        </div>
       </div>
     </div>
   )

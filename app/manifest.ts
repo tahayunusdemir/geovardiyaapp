@@ -2,10 +2,13 @@ import type { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: '/',
     name: 'GeoVardiyaApp',
     short_name: 'GeoVardiya',
     description: 'Coğrafi konum destekli vardiya yönetim uygulaması',
+    lang: 'tr',
     start_url: '/',
+    scope: '/',
     display: 'standalone',
     background_color: '#ffffff',
     theme_color: '#18181b',
