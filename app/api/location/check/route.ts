@@ -21,6 +21,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Yetkisiz' }, { status: 401 })
     }
 
+    // SW tarafından tetiklendiyse bildirim göndermez — SW kendi gösterir
+    const url = new URL(req.url)
+    const fromSW = url.searchParams.get('sw') === '1'
+
     const employeeId = (session.user as { id: string }).id
     const { lat, lng } = await req.json()
     if (lat == null || lng == null) {
@@ -51,34 +55,23 @@ export async function POST(req: Request) {
       checkedAt: new Date(),
     })
 
-    // Sadece durum değiştiğinde bildirim gönder
     const wasInside = prevLog?.isInside ?? null
     const stateChanged = wasInside !== null && wasInside !== isInside
 
-    if (stateChanged) {
+    // SW çağırıyorsa bildirim göndermez — SW response'dan kendi gösterir
+    if (!fromSW && stateChanged) {
       const employerId = workplace.employerId._id.toString()
+      const now = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
 
       if (isInside) {
         await Promise.all([
-          sendPushToUser(employeeId, {
-            title: 'GeoVardiyaApp',
-            body: 'Çalışma alanına girdiniz.',
-          }),
-          sendPushToUser(employerId, {
-            title: 'GeoVardiyaApp',
-            body: `İşçi çalışma alanına girdi.`,
-          }),
+          sendPushToUser(employeeId, { title: 'GeoVardiyaApp', body: `${now} — Çalışma alanına girdiniz.` }),
+          sendPushToUser(employerId, { title: 'GeoVardiyaApp', body: `${now} — İşçi çalışma alanına girdi.` }),
         ])
       } else {
         await Promise.all([
-          sendPushToUser(employeeId, {
-            title: 'GeoVardiyaApp — Uyarı',
-            body: 'Çalışma alanı dışına çıktınız.',
-          }),
-          sendPushToUser(employerId, {
-            title: 'GeoVardiyaApp — Uyarı',
-            body: `İşçi çalışma alanı dışına çıktı. Mesafe: ${Math.round(distance)}m`,
-          }),
+          sendPushToUser(employeeId, { title: 'GeoVardiyaApp — Uyarı', body: `${now} — Çalışma alanı dışındasınız. (${Math.round(distance)}m)` }),
+          sendPushToUser(employerId, { title: 'GeoVardiyaApp — Uyarı', body: `${now} — İşçi çalışma alanı dışına çıktı. Mesafe: ${Math.round(distance)}m` }),
         ])
       }
     }

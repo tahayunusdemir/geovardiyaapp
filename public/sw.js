@@ -19,17 +19,80 @@ self.addEventListener('periodicsync', (event) => {
 self.addEventListener('push', (event) => {
   if (!event.data) return
   const data = event.data.json()
+
+  // Sunucu ping'i — konum kontrolü yap, bildirimi SW gösterir
+  if (data.type === 'PING_LOCATION') {
+    event.waitUntil(swLocationCheck())
+    return
+  }
+
   event.waitUntil(
     self.registration.showNotification(data.title || 'GeoVardiyaApp', {
       body: data.body,
       icon: data.icon || '/icon-192x192.png',
       badge: '/badge.png',
       vibrate: [200, 100, 200],
-      tag: 'geo-status', // aynı tag → yeni bildirim eskisinin üzerine yazar
+      tag: 'geo-status',
       renotify: true,
     })
   )
 })
+
+async function swLocationCheck() {
+  const now = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+
+  try {
+    const cache = await caches.open('geo-cache')
+    const cached = await cache.match('last-location')
+
+    if (!cached) {
+      await self.registration.showNotification('GeoVardiyaApp', {
+        body: `${now} — Konum verisi bulunamadı. Uygulamayı açın.`,
+        icon: '/icon-192x192.png', badge: '/badge.png', tag: 'geo-status', renotify: true,
+      })
+      return
+    }
+
+    const { lat, lng, savedAt } = await cached.json()
+    if (Date.now() - savedAt > 6 * 60 * 60 * 1000) {
+      await self.registration.showNotification('GeoVardiyaApp', {
+        body: `${now} — Konum verisi çok eski. Uygulamayı açın.`,
+        icon: '/icon-192x192.png', badge: '/badge.png', tag: 'geo-status', renotify: true,
+      })
+      return
+    }
+
+    const res = await fetch('/api/location/check?sw=1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat, lng }),
+      credentials: 'same-origin',
+    })
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+
+    await self.registration.showNotification(
+      data.isInside ? 'GeoVardiyaApp ✓' : 'GeoVardiyaApp ✗',
+      {
+        body: data.isInside
+          ? `${now} — Çalışma alanındasınız.`
+          : `${now} — Çalışma alanı dışındasınız. (${data.distance}m)`,
+        icon: '/icon-192x192.png',
+        badge: '/badge.png',
+        vibrate: [200, 100, 200],
+        tag: 'geo-status',
+        renotify: true,
+      }
+    )
+  } catch (err) {
+    console.error('[SW] swLocationCheck başarısız:', err)
+    await self.registration.showNotification('GeoVardiyaApp', {
+      body: `${now} — Arka plan kontrolü başarısız.`,
+      icon: '/icon-192x192.png', badge: '/badge.png', tag: 'geo-status', renotify: true,
+    })
+  }
+}
 
 // Bildirime tıklanınca uygulamayı aç
 self.addEventListener('notificationclick', (event) => {
