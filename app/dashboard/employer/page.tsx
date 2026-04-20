@@ -5,6 +5,7 @@ import { useSession, signOut } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 import { Moon, Sun, UserPlus, UserMinus, Search } from 'lucide-react'
 import dynamic from 'next/dynamic'
+import InstallPrompt from '@/components/InstallPrompt'
 
 const WorkplaceMap = dynamic(() => import('./WorkplaceMap'), { ssr: false })
 
@@ -205,6 +206,7 @@ export default function EmployerDashboard() {
       </div>
 
       <div className="max-w-5xl mx-auto p-3 sm:p-6 flex flex-col gap-4 sm:gap-6">
+        <InstallPrompt />
 
         {/* İşyeri Sekmesi */}
         {activeTab === 'ishyeri' && (

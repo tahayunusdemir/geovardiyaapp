@@ -79,12 +79,16 @@ export default function Page() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-black px-4">
+    <div className="min-h-screen flex items-start justify-center bg-black px-4 py-8 sm:items-center">
       <div className="w-full max-w-xs">
 
-        <h1 className="text-white text-xl font-semibold tracking-tight mb-8 text-center">
+        <h1 className="text-white text-xl font-semibold tracking-tight mb-6 text-center">
           GeoVardiyaApp
         </h1>
+
+        <div className="mb-6">
+          <InstallPrompt />
+        </div>
 
         {/* Tabs */}
         <div className="flex border border-zinc-800 rounded-lg overflow-hidden mb-6">
@@ -186,9 +190,6 @@ export default function Page() {
           </form>
         )}
 
-        <div className="mt-6">
-          <InstallPrompt />
-        </div>
       </div>
     </div>
   )
