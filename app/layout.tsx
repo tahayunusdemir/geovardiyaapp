@@ -34,6 +34,16 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        {/* beforeinstallprompt React hydrate öncesi tetiklenebilir — global değişkende yakala */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          window.__deferredInstallPrompt = null;
+          window.addEventListener('beforeinstallprompt', function(e) {
+            e.preventDefault();
+            window.__deferredInstallPrompt = e;
+          });
+        `}} />
+      </head>
       <body className="min-h-full flex flex-col">
           <Providers>{children}</Providers>
         </body>
