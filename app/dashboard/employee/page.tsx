@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { subscribeUser, unsubscribeUser } from '@/app/actions'
+import InstallPrompt from '@/components/InstallPrompt'
 
 type LocationStatus = 'checking' | 'inside' | 'outside' | 'error' | 'no-workplace'
 type PermissionStep = 'idle' | 'requesting' | 'denied' | 'granted'
@@ -313,6 +314,9 @@ export default function EmployeeDashboard() {
             <button onClick={initPush} className="shrink-0 text-xs text-zinc-300 hover:text-white px-3 py-2 rounded-lg hover:bg-zinc-800 active:bg-zinc-700">Aç</button>
           )}
         </div>
+
+        {/* Ana ekrana ekle */}
+        {permStep === 'granted' && <InstallPrompt />}
 
         {/* Bilgi */}
         <div className="bg-zinc-900 rounded-2xl p-5 flex flex-col gap-2">
